@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.filter.outputs.backend == 'true' && steps.exists.outputs.backend == 'true' }}
+      web: ${{ steps.filter.outputs.web == 'true' && steps.exists.outputs.web == 'true' }}
+      mobile: ${{ steps.filter.outputs.mobile == 'true' && steps.exists.outputs.mobile == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - '.github/workflows/ci.yml'
+              - 'backend/**'
+              - 'docker-compose.yml'
+            web:
+              - '.github/workflows/ci.yml'
+              - 'frontend/**'
+            mobile:
+              - '.github/workflows/ci.yml'
+              - 'apps/mobile/**'
+      # Skips a part until its project skeleton exists.
+      - id: exists
+        run: |
+          [ -f backend/pyproject.toml ] && echo "backend=true" >> "$GITHUB_OUTPUT" || true
+          [ -f frontend/package.json ] && echo "web=true" >> "$GITHUB_OUTPUT" || true
+          [ -f apps/mobile/package.json ] && echo "mobile=true" >> "$GITHUB_OUTPUT" || true
+
+  backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql+psycopg://loscalorias:loscalorias@localhost:5432/loscalorias
+      OPENAI_API_KEY: test-key-not-used
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --frozen
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Start Postgres
+        working-directory: .
+        run: docker compose up -d --wait --wait-timeout 120 db
+      - name: Migrations match models
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
+      - name: Tests
+        run: uv run pytest -q
+      - name: Docker image builds
+        run: docker build -t los-calorias-backend:ci .
+
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npx vitest run
+
+  mobile:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm test -- --ci
+      - run: npx expo-doctor
+
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            build
+            ci
+            chore
+            style
+            revert
+          requireScope: false
+
+  # Single required check: skipped jobs count as passed, failed or cancelled ones do not.
+  ci-ok:
+    if: always()
+    needs: [changes, backend, web, mobile, pr-title]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: |
+          if ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}; then
+            echo "::error::a required job failed or was cancelled"
+            exit 1
+          fi

@@ -1,0 +1,23 @@
+## What and why
+
+<!-- One or two sentences. What changes, and what problem it solves. -->
+
+## How to verify
+
+<!-- The commands a reviewer should run, or the screens to click through.
+     Add a screenshot or a short video for UI changes. -->
+
+## Notes
+
+<!-- Anything a reviewer would otherwise have to ask: a decision you made, a
+     trade-off, something deliberately left out, a follow-up issue. Delete if
+     there is nothing. -->
+
+---
+
+- [ ] Conventional commit title (`feat:` / `fix:` / `chore:` …) — it becomes the squash commit and decides the version bump
+- [ ] Changes stay in my zone, or the zone owner is tagged
+- [ ] Tests added or updated for behaviour changes
+- [ ] Lint and tests pass locally
+- [ ] If a model changed, a migration is added
+- [ ] No secrets or keys in the code
