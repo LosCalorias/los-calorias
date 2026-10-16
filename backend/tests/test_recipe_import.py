@@ -2,14 +2,19 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 import pytest
+from fastapi.testclient import TestClient
+from openai import OpenAIError
 from yt_dlp.utils import DownloadError
 from app.integrations.openai import client as openai_client
 from app.integrations.openai.client import RecipeExtraction
+from app.main import app
 from app.modules.recipe_import import service, video
 from app.modules.recipe_import.errors import VideoDownloadError
-from app.modules.recipe_import.schemas import IngredientDraft
+from app.modules.recipe_import.schemas import IngredientDraft, RecipeDraft
 
 TIKTOK_URL = "https://www.tiktok.com/@chef/video/123"
+
+client = TestClient(app)
 
 
 def make_ingredient() -> IngredientDraft:
@@ -165,3 +170,95 @@ def test_import_removes_temp_dir_on_error(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert len(workdirs) == 1
     assert not workdirs[0].exists()
+
+
+def make_draft(source_url: str) -> RecipeDraft:
+    return RecipeDraft(
+        title="Млинці",
+        servings=4,
+        ingredients=[make_ingredient()],
+        steps=["Змішати інгредієнти", "Посмажити"],
+        source_url=source_url,
+    )
+
+
+@pytest.fixture
+def pipeline(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+    mocks = SimpleNamespace(
+        download_audio=MagicMock(
+            side_effect=lambda url, workdir: video.VideoData(
+                audio_path=workdir / "123.m4a", description="Рецепт млинців", duration=60
+            )
+        ),
+        transcribe=MagicMock(return_value="transcript"),
+        extract_recipe=MagicMock(
+            side_effect=lambda transcript, description, source_url: make_draft(source_url)
+        ),
+    )
+    for name in ("download_audio", "transcribe", "extract_recipe"):
+        monkeypatch.setattr(service, name, getattr(mocks, name))
+    return mocks
+
+
+def post_import(url: str):
+    return client.post("/recipes/import", json={"url": url})
+
+
+def test_import_endpoint_returns_draft(pipeline: SimpleNamespace) -> None:
+    response = post_import(TIKTOK_URL)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "Млинці"
+    assert body["ingredients"][0]["name"] == "Борошно"
+    assert body["steps"] == ["Змішати інгредієнти", "Посмажити"]
+    assert body["source_url"] == TIKTOK_URL
+    pipeline.extract_recipe.assert_called_once_with("transcript", "Рецепт млинців", TIKTOK_URL)
+
+
+def test_import_endpoint_rejects_youtube(pipeline: SimpleNamespace) -> None:
+    response = post_import("https://www.youtube.com/watch?v=abc")
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Підтримуються лише посилання на TikTok або Instagram"
+    pipeline.download_audio.assert_not_called()
+
+
+def test_import_endpoint_reports_no_recipe(pipeline: SimpleNamespace) -> None:
+    pipeline.extract_recipe.side_effect = None
+    pipeline.extract_recipe.return_value = None
+
+    response = post_import(TIKTOK_URL)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "У відео не знайдено рецепта"
+
+
+def test_import_endpoint_reports_download_error(pipeline: SimpleNamespace) -> None:
+    pipeline.download_audio.side_effect = VideoDownloadError("not found")
+
+    response = post_import(TIKTOK_URL)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Не вдалося завантажити відео. Перевірте посилання"
+
+
+def test_import_endpoint_rejects_long_video(pipeline: SimpleNamespace) -> None:
+    pipeline.download_audio.side_effect = lambda url, workdir: video.VideoData(
+        audio_path=workdir / "123.m4a", description="", duration=11 * 60
+    )
+
+    response = post_import(TIKTOK_URL)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Відео довше 10 хвилин"
+    pipeline.transcribe.assert_not_called()
+
+
+def test_import_endpoint_reports_openai_error(pipeline: SimpleNamespace) -> None:
+    pipeline.transcribe.side_effect = OpenAIError("unavailable")
+
+    response = post_import(TIKTOK_URL)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Сервіс розпізнавання тимчасово недоступний"
