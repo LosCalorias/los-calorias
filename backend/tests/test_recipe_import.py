@@ -2,8 +2,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 import pytest
+from yt_dlp.utils import DownloadError
 from app.integrations.openai import client as openai_client
 from app.integrations.openai.client import RecipeExtraction
+from app.modules.recipe_import import video
+from app.modules.recipe_import.errors import VideoDownloadError
 from app.modules.recipe_import.schemas import IngredientDraft
 
 TIKTOK_URL = "https://www.tiktok.com/@chef/video/123"
@@ -80,3 +83,40 @@ def test_extract_recipe_returns_draft(fake_openai: MagicMock) -> None:
     user_message = kwargs["messages"][1]["content"]
     assert "transcript" in user_message
     assert "description" in user_message
+
+
+def mock_youtube_dl(monkeypatch: pytest.MonkeyPatch, ydl: MagicMock) -> MagicMock:
+    factory = MagicMock()
+    factory.return_value.__enter__.return_value = ydl
+    monkeypatch.setattr(video.yt_dlp, "YoutubeDL", factory)
+    return factory
+
+
+def test_download_audio_returns_video_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    ydl = MagicMock()
+    ydl.extract_info.return_value = {
+        "description": None,
+        "duration": 42,
+        "requested_downloads": [{"filepath": str(tmp_path / "123.m4a")}],
+    }
+    factory = mock_youtube_dl(monkeypatch, ydl)
+
+    data = video.download_audio(TIKTOK_URL, tmp_path)
+
+    assert data == video.VideoData(audio_path=tmp_path / "123.m4a", description="", duration=42.0)
+    options = factory.call_args.args[0]
+    assert options["format"] == "worstaudio/worst"
+    assert options["noplaylist"] is True
+    assert options["outtmpl"].startswith(str(tmp_path))
+    assert "postprocessors" not in options
+
+
+def test_download_audio_wraps_download_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ydl = MagicMock()
+    ydl.extract_info.side_effect = DownloadError("not found")
+    mock_youtube_dl(monkeypatch, ydl)
+
+    with pytest.raises(VideoDownloadError):
+        video.download_audio(TIKTOK_URL, tmp_path)
