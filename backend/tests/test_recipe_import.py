@@ -5,7 +5,7 @@ import pytest
 from yt_dlp.utils import DownloadError
 from app.integrations.openai import client as openai_client
 from app.integrations.openai.client import RecipeExtraction
-from app.modules.recipe_import import video
+from app.modules.recipe_import import service, video
 from app.modules.recipe_import.errors import VideoDownloadError
 from app.modules.recipe_import.schemas import IngredientDraft
 
@@ -120,3 +120,48 @@ def test_download_audio_wraps_download_error(
 
     with pytest.raises(VideoDownloadError):
         video.download_audio(TIKTOK_URL, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.tiktok.com/@chef/video/123",
+        "https://vm.tiktok.com/ZMabc/",
+        "https://vt.tiktok.com/ZSabc/",
+        "https://tiktok.com/@chef/video/123",
+        "https://www.instagram.com/reel/abc/",
+        "https://instagram.com/reel/abc/",
+    ],
+)
+def test_supported_urls(url: str) -> None:
+    assert service.is_supported_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.youtube.com/watch?v=abc",
+        "https://eviltiktok.com/video/123",
+        "https://tiktok.com.evil.com/video/123",
+        "ftp://www.tiktok.com/video/123",
+    ],
+)
+def test_unsupported_urls(url: str) -> None:
+    assert not service.is_supported_url(url)
+
+
+def test_import_removes_temp_dir_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    workdirs: list[Path] = []
+
+    def failing_download(url: str, workdir: Path) -> video.VideoData:
+        workdirs.append(workdir)
+        (workdir / "partial.m4a").write_bytes(b"audio")
+        raise VideoDownloadError(url)
+
+    monkeypatch.setattr(service, "download_audio", failing_download)
+
+    with pytest.raises(VideoDownloadError):
+        service.import_recipe(TIKTOK_URL)
+
+    assert len(workdirs) == 1
+    assert not workdirs[0].exists()
