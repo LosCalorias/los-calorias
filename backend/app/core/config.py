@@ -6,6 +6,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://loscalorias:loscalorias@localhost:5432/loscalorias"
     openai_api_key: str = ""
+    jwt_secret: str
+    jwt_expire_minutes: int = 7 * 24 * 60
 
 
 settings = Settings()
