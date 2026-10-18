@@ -1,4 +1,4 @@
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class IngredientDraft(BaseModel):
@@ -13,8 +13,8 @@ class IngredientDraft(BaseModel):
 
 
 class RecipeDraft(BaseModel):
-    title: str
-    servings: int
+    title: str = Field(min_length=1, max_length=200)
+    servings: int = Field(ge=1)
     ingredients: list[IngredientDraft]
     steps: list[str]
     source_url: str
