@@ -33,6 +33,20 @@ export type Recipe = {
   nutrition: { total: Macros; per_serving: Macros };
 };
 
+export type RecipeSummary = {
+  id: number;
+  title: string;
+  servings: number;
+  kcal_per_serving: number;
+};
+
+export function useRecipes() {
+  return useQuery({
+    queryKey: ['recipes', 'list'],
+    queryFn: () => apiRequest<RecipeSummary[]>('/recipes'),
+  });
+}
+
 export function useRecipe(id: number, servings?: number) {
   return useQuery({
     queryKey: ['recipes', id, servings ?? 'saved'],
