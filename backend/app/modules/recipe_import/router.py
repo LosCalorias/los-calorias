@@ -1,5 +1,8 @@
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
+from fastapi import APIRouter, Depends, HTTPException, status
 from openai import OpenAIError
+from app.models import User
+from app.modules.auth.dependencies import get_current_user
 from app.modules.recipe_import.errors import (
     NoRecipeFoundError,
     RecipeImportError,
@@ -21,7 +24,9 @@ ERROR_MESSAGES: dict[type[RecipeImportError], str] = {
 
 
 @router.post("/import", response_model=RecipeDraft)
-def import_recipe_from_video(request: ImportRequest) -> RecipeDraft:
+def import_recipe_from_video(
+    request: ImportRequest, user: Annotated[User, Depends(get_current_user)]
+) -> RecipeDraft:
     try:
         return import_recipe(str(request.url))
     except RecipeImportError as error:

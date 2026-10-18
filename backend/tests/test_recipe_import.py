@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -8,6 +9,8 @@ from yt_dlp.utils import DownloadError
 from app.integrations.openai import client as openai_client
 from app.integrations.openai.client import RecipeExtraction
 from app.main import app
+from app.models import User
+from app.modules.auth.dependencies import get_current_user
 from app.modules.recipe_import import service, video
 from app.modules.recipe_import.errors import VideoDownloadError
 from app.modules.recipe_import.schemas import IngredientDraft, RecipeDraft
@@ -183,7 +186,7 @@ def make_draft(source_url: str) -> RecipeDraft:
 
 
 @pytest.fixture
-def pipeline(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+def pipeline(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
     mocks = SimpleNamespace(
         download_audio=MagicMock(
             side_effect=lambda url, workdir: video.VideoData(
@@ -197,7 +200,11 @@ def pipeline(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     )
     for name in ("download_audio", "transcribe", "extract_recipe"):
         monkeypatch.setattr(service, name, getattr(mocks, name))
-    return mocks
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id=1, email="t@example.com", password_hash="x"
+    )
+    yield mocks
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 def post_import(url: str):
@@ -262,3 +269,13 @@ def test_import_endpoint_reports_openai_error(pipeline: SimpleNamespace) -> None
 
     assert response.status_code == 503
     assert response.json()["detail"] == "Сервіс розпізнавання тимчасово недоступний"
+
+
+def test_import_endpoint_requires_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    download_audio = MagicMock()
+    monkeypatch.setattr(service, "download_audio", download_audio)
+
+    response = post_import(TIKTOK_URL)
+
+    assert response.status_code == 401
+    download_audio.assert_not_called()
