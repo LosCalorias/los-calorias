@@ -4,11 +4,16 @@ version = "0.0.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.20.0",
+    "email-validator>=2.3.0",
     "fastapi>=0.143.0",
+    "openai>=3.31.0",
     "psycopg[binary]>=3.3.6",
+    "pwdlib[argon2]>=0.3.1",
     "pydantic-settings>=2.15.0",
+    "pyjwt>=2.15.1",
     "sqlmodel>=0.0.48",
     "uvicorn[standard]>=0.54.0",
+    "yt-dlp>=2026.8.19",
 ]
 
 [dependency-groups]
