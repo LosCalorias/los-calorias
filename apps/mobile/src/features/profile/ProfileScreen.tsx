@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { Button, ChoiceGroup, ErrorText, Field, colors, layout } from '@/components/form';
+import { useAuth } from '@/features/auth/AuthProvider';
 import {
   ACTIVITY_OPTIONS,
   type ActivityLevel,
@@ -45,8 +46,9 @@ export function ProfileScreen() {
   }
   if (profile.isError) {
     return (
-      <View style={layout.center}>
+      <View style={[layout.center, { gap: 16 }]}>
         <ErrorText>{profile.error.message}</ErrorText>
+        <SignOutButton />
       </View>
     );
   }
@@ -92,8 +94,14 @@ function ProfileForm({ profile }: { profile: Profile | null }) {
       <ChoiceGroup label="Ціль" options={GOAL_OPTIONS} value={form.goal} onChange={(v) => update('goal', v)} />
       <ErrorText>{formError || saveProfile.error?.message}</ErrorText>
       <Button title="Зберегти" onPress={submit} loading={saveProfile.isPending} />
+      <SignOutButton />
     </ScrollView>
   );
+}
+
+function SignOutButton() {
+  const { signOut } = useAuth();
+  return <Button title="Вийти" variant="secondary" onPress={() => void signOut()} />;
 }
 
 function NormCard({ norm }: { norm: DailyNorm }) {
