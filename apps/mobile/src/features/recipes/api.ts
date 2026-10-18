@@ -63,3 +63,19 @@ export function useDeleteRecipe() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['recipes'] }),
   });
 }
+
+export function useImportRecipe() {
+  return useMutation({
+    mutationFn: (url: string) =>
+      apiRequest<RecipeDraft>('/recipes/import', { method: 'POST', body: { url } }),
+  });
+}
+
+export function useSaveRecipe() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (draft: RecipeDraft) =>
+      apiRequest<Recipe>('/recipes', { method: 'POST', body: draft }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['recipes'] }),
+  });
+}
