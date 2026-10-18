@@ -23,6 +23,7 @@ function RootNavigator() {
     <Stack>
       <Stack.Protected guard={!!token} redirectTo="/login">
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="recipes/[id]" options={{ title: 'Рецепт' }} />
       </Stack.Protected>
       <Stack.Protected guard={!token}>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
