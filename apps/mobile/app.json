@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "LosCalorías",
+    "slug": "los-calorias",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "scheme": "loscalorias",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
