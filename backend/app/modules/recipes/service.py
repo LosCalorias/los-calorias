@@ -1,7 +1,7 @@
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 from app.models import Ingredient, Recipe
-from app.modules.nutrition.calc import ingredient_macros, recipe_nutrition
+from app.modules.nutrition.calc import ingredient_macros, recipe_nutrition, scale_ingredients
 from app.modules.recipe_import.schemas import IngredientDraft, RecipeDraft
 from app.modules.recipes.schemas import IngredientRead, RecipeRead, RecipeSummary
 
@@ -67,12 +67,13 @@ def ingredient_drafts(recipe: Recipe) -> list[IngredientDraft]:
     ]
 
 
-def to_read(recipe: Recipe) -> RecipeRead:
-    ingredients = ingredient_drafts(recipe)
+def to_read(recipe: Recipe, servings: int | None = None) -> RecipeRead:
+    servings = servings or recipe.servings
+    ingredients = scale_ingredients(ingredient_drafts(recipe), servings / recipe.servings)
     return RecipeRead(
         id=recipe.id,
         title=recipe.title,
-        servings=recipe.servings,
+        servings=servings,
         ingredients=[
             IngredientRead(
                 **ingredient.model_dump(), missing_nutrition=ingredient_macros(ingredient) is None
@@ -81,7 +82,7 @@ def to_read(recipe: Recipe) -> RecipeRead:
         ],
         steps=recipe.steps,
         source_url=recipe.source_url,
-        nutrition=recipe_nutrition(ingredients, recipe.servings),
+        nutrition=recipe_nutrition(ingredients, servings),
     )
 
 

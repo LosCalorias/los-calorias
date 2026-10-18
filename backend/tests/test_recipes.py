@@ -141,3 +141,29 @@ def test_create_recipe_validates_input(override: dict[str, object]) -> None:
     response = client.post("/recipes", json=RECIPE | override, headers=auth_header())
 
     assert response.status_code == 422
+
+
+def test_get_recipe_scales_to_servings() -> None:
+    headers = auth_header()
+    recipe_id = create_recipe(headers)["id"]
+    original = client.get(f"/recipes/{recipe_id}", headers=headers).json()
+
+    response = client.get(f"/recipes/{recipe_id}", params={"servings": 4}, headers=headers)
+
+    assert response.status_code == 200
+    scaled = response.json()
+    assert scaled["servings"] == 4
+    assert [i["grams"] for i in scaled["ingredients"]] == [400, None, 600]
+    assert [i["quantity"] for i in scaled["ingredients"]] == [400, None, 600]
+    assert scaled["nutrition"]["total"] == {"kcal": 1816, "protein": 58, "fat": 19, "carbs": 332.2}
+    assert scaled["nutrition"]["per_serving"] == original["nutrition"]["per_serving"]
+    assert client.get(f"/recipes/{recipe_id}", headers=headers).json() == original
+
+
+def test_get_recipe_rejects_zero_servings() -> None:
+    headers = auth_header()
+    recipe_id = create_recipe(headers)["id"]
+
+    response = client.get(f"/recipes/{recipe_id}", params={"servings": 0}, headers=headers)
+
+    assert response.status_code == 422

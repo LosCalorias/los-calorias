@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session
 from app.core.db import get_session
 from app.models import Recipe, User
@@ -40,8 +40,13 @@ def read_all(user: CurrentUser, session: SessionDep) -> list[RecipeSummary]:
 
 
 @router.get("/{recipe_id}", response_model=RecipeRead)
-def read_one(recipe_id: int, user: CurrentUser, session: SessionDep) -> RecipeRead:
-    return to_read(get_own_recipe(session, user, recipe_id))
+def read_one(
+    recipe_id: int,
+    user: CurrentUser,
+    session: SessionDep,
+    servings: Annotated[int | None, Query(ge=1)] = None,
+) -> RecipeRead:
+    return to_read(get_own_recipe(session, user, recipe_id), servings)
 
 
 @router.put("/{recipe_id}", response_model=RecipeRead)
