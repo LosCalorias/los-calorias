@@ -25,6 +25,15 @@ RECIPE = {
     "source_url": "https://www.tiktok.com/@chef/video/1",
 }
 MANUAL = {"date": TODAY, "meal_type": "snack", "name": "Яблуко", "kcal": 52}
+PROFILE = {
+    "sex": "female",
+    "age": 30,
+    "height_cm": 165,
+    "weight_kg": 60,
+    "activity_level": "moderate",
+    "goal": "maintain",
+}
+NORM = {"kcal": 2046, "protein": 128, "fat": 68, "carbs": 230}
 
 
 def auth_header(email: str = "anna@example.com") -> dict[str, str]:
@@ -161,3 +170,63 @@ def test_meals_require_login() -> None:
     assert client.post("/meals", json=MANUAL).status_code == 401
     assert client.get("/meals", params={"date": TODAY}).status_code == 401
     assert client.delete("/meals/1").status_code == 401
+
+
+def profile_header() -> dict[str, str]:
+    headers = auth_header()
+    client.put("/profile", json=PROFILE, headers=headers)
+    return headers
+
+
+def get_summary(headers: dict[str, str], day: str = TODAY):
+    return client.get("/meals/summary", params={"date": day}, headers=headers)
+
+
+def test_summary_without_meals_equals_norm() -> None:
+    response = get_summary(profile_header())
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "norm": NORM,
+        "consumed": {"kcal": 0, "protein": 0, "fat": 0, "carbs": 0},
+        "remaining": NORM,
+    }
+
+
+def test_logging_one_serving_reduces_remaining() -> None:
+    headers = profile_header()
+    log_recipe(headers, create_recipe(headers), 1)
+
+    summary = get_summary(headers).json()
+
+    assert summary["consumed"] == {"kcal": 100, "protein": 10, "fat": 5, "carbs": 20}
+    assert summary["remaining"] == {"kcal": 1946, "protein": 118, "fat": 63, "carbs": 210}
+
+
+def test_remaining_can_be_negative() -> None:
+    headers = profile_header()
+    client.post("/meals", json=MANUAL | {"kcal": 2100.5, "fat": 70}, headers=headers)
+
+    remaining = get_summary(headers).json()["remaining"]
+
+    assert remaining["kcal"] == -54.5
+    assert remaining["fat"] == -2
+
+
+def test_yesterdays_meals_do_not_affect_today() -> None:
+    headers = profile_header()
+    log_recipe(headers, create_recipe(headers), 1, day=YESTERDAY)
+
+    assert get_summary(headers).json()["remaining"] == NORM
+    assert get_summary(headers, YESTERDAY).json()["consumed"]["kcal"] == 100
+
+
+def test_summary_without_profile_is_not_found() -> None:
+    response = get_summary(auth_header())
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Профіль ще не заповнено"
+
+
+def test_summary_requires_login() -> None:
+    assert client.get("/meals/summary", params={"date": TODAY}).status_code == 401

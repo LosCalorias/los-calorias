@@ -1,9 +1,16 @@
 from datetime import date
 from sqlmodel import Session, col, select
-from app.models import Meal, Recipe
-from app.modules.nutrition.calc import recipe_nutrition, round_macros, scale_macros
-from app.modules.nutrition.meal_schemas import MealCreate
+from app.models import Meal, Profile, Recipe
+from app.modules.nutrition.calc import (
+    ZERO,
+    add_macros,
+    recipe_nutrition,
+    round_macros,
+    scale_macros,
+)
+from app.modules.nutrition.meal_schemas import DaySummary, MealCreate
 from app.modules.nutrition.schemas import Macros
+from app.modules.profile.norm import calculate_daily_norm
 from app.modules.recipes.service import ingredient_drafts
 
 
@@ -55,3 +62,16 @@ def get_meal(session: Session, user_id: int, meal_id: int) -> Meal | None:
 def delete_meal(session: Session, meal: Meal) -> None:
     session.delete(meal)
     session.commit()
+
+
+def day_summary(session: Session, user_id: int, day: date, profile: Profile) -> DaySummary:
+    norm = Macros.model_validate(calculate_daily_norm(profile).model_dump())
+    consumed = ZERO
+    for meal in list_meals(session, user_id, day):
+        meal_macros = Macros(kcal=meal.kcal, protein=meal.protein, fat=meal.fat, carbs=meal.carbs)
+        consumed = add_macros(consumed, meal_macros)
+    return DaySummary(
+        norm=norm,
+        consumed=round_macros(consumed),
+        remaining=round_macros(add_macros(norm, scale_macros(consumed, -1))),
+    )

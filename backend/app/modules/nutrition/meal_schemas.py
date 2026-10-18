@@ -2,6 +2,7 @@ from datetime import date as Date
 from typing import Self
 from pydantic import BaseModel, Field, model_validator
 from app.models import MealType
+from app.modules.nutrition.schemas import Macros
 
 
 class MealCreate(BaseModel):
@@ -50,3 +51,9 @@ class MealRead(BaseModel):
     protein: float
     fat: float
     carbs: float
+
+
+class DaySummary(BaseModel):
+    norm: Macros
+    consumed: Macros
+    remaining: Macros
