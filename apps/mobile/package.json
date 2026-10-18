@@ -1,6 +1,6 @@
 {
   "name": "los-calorias-mobile",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@tanstack/react-query": "^5.104.4",

@@ -2,7 +2,7 @@
   "expo": {
     "name": "LosCalorías",
     "slug": "los-calorias",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "loscalorias",
     "userInterfaceStyle": "automatic",
