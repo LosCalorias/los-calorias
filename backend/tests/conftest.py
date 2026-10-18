@@ -1,6 +1,6 @@
 import os
 
-os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-bytes-long")
 
 from collections.abc import Iterator  # noqa: E402
 import pytest  # noqa: E402
