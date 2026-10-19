@@ -5,6 +5,7 @@
   "packages": {
     ".": {
       "release-type": "simple",
+      "initial-version": "0.1.0",
       "package-name": "los-calorias",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
